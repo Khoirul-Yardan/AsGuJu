@@ -1,0 +1,75 @@
+/* Modern clean UI, dark-blue accents, responsive */
+:root{
+  --bg:#0b1220;
+  --card:#0f1724;
+  --muted:#9aa7b2;
+  --accent:#2dd4bf;
+  --accent2:#38bdf8;
+  --glass: rgba(255,255,255,0.03);
+}
+
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial}
+body{background:linear-gradient(180deg,#071029 0%, #071a2a 100%);color:#e6eef6;display:flex;align-items:stretch;justify-content:center;padding:24px}
+
+.app{width:100%;max-width:1200px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:14px;box-shadow:0 10px 40px rgba(2,6,23,0.8);overflow:hidden;display:flex;flex-direction:column}
+
+.top{display:flex;justify-content:space-between;align-items:center;padding:20px 28px;border-bottom:1px solid rgba(255,255,255,0.03)}
+.brand h1{margin:0;font-size:1.6rem;color:var(--accent2);letter-spacing:0.6px}
+.brand span{display:block;color:var(--muted);font-size:0.9rem;margin-top:4px}
+.mode{color:var(--muted);font-size:0.9rem}
+
+.main{display:flex;gap:18px;padding:20px}
+.left{flex:1;min-width:320px;padding:16px}
+.right{flex:1.1;min-width:360px;padding:16px;border-left:1px solid rgba(255,255,255,0.02)}
+
+.label{color:var(--muted);font-size:0.9rem;margin-bottom:8px;display:block}
+textarea{width:100%;height:140px;border-radius:12px;padding:12px;border:none;background:var(--glass);color:inherit;resize:vertical;outline:none;font-size:0.95rem}
+
+.uploader{margin-top:12px;padding:14px;border-radius:12px;background:linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border:1px dashed rgba(255,255,255,0.03);position:relative;cursor:pointer}
+.uploader input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+.drop{color:var(--muted);text-align:center;padding:18px}
+
+.file-list{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.file-item{background:linear-gradient(90deg, rgba(255,255,255,0.01), rgba(255,255,255,0.02));padding:10px;border-radius:10px;display:flex;justify-content:space-between;align-items:center}
+.file-item .meta{font-size:0.9rem;color:var(--muted)}
+.file-item button{background:transparent;border:1px solid rgba(255,255,255,0.03);color:var(--accent2);padding:6px 10px;border-radius:8px;cursor:pointer}
+
+.controls{margin-top:14px;display:flex;gap:10px}
+.btn{padding:10px 14px;border-radius:10px;border:none;cursor:pointer;background:rgba(255,255,255,0.03);color:var(--muted)}
+.btn.primary{background:linear-gradient(90deg,var(--accent2),var(--accent));color:#041022;font-weight:700}
+
+.result-area{min-height:360px;padding:14px;border-radius:12px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.02));overflow:auto}
+.hint{color:var(--muted)}
+
+.result-card{background:rgba(255,255,255,0.02);padding:14px;border-radius:10px;margin-bottom:12px;border-left:4px solid var(--accent2)}
+.result-card h3{margin:0 0 8px 0;color:var(--accent2)}
+.result-card p{color:#dbeafe;line-height:1.5}
+.result-card .meta{font-size:0.85rem;color:var(--muted);margin-top:8px}
+
+.footer{padding:12px 18px;border-top:1px solid rgba(255,255,255,0.02);text-align:center;color:var(--muted);font-size:0.85rem}
+@media (max-width:900px){
+  .main{flex-direction:column}
+  .right{border-left:none;border-top:1px solid rgba(255,255,255,0.02)}
+}
+
+/* Tambahkan ini ke CSS kamu */
+.scrollable-section {
+  max-height: 70vh; /* batas tinggi agar tetap elegan */
+  overflow-y: auto; /* aktifkan scroll vertikal */
+  padding-right: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: #00aaff #0f172a;
+}
+
+/* Tampilan scrollbar lebih modern */
+.scrollable-section::-webkit-scrollbar {
+  width: 8px;
+}
+.scrollable-section::-webkit-scrollbar-thumb {
+  background-color: #00aaff;
+  border-radius: 10px;
+}
+.scrollable-section::-webkit-scrollbar-track {
+  background: #0f172a;
+}

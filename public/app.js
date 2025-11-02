@@ -1,6 +1,4 @@
-// app.js - frontend
 const fileInput = document.getElementById('fileInput');
-const uploader = document.getElementById('uploader');
 const fileList = document.getElementById('fileList');
 const analyzeBtn = document.getElementById('analyzeBtn');
 const clearBtn = document.getElementById('clearBtn');
@@ -11,18 +9,6 @@ let filesToUpload = [];
 
 fileInput.addEventListener('change', (e) => {
   const files = Array.from(e.target.files);
-  addFiles(files);
-});
-
-uploader.addEventListener('dragover', (e) => {
-  e.preventDefault();
-  uploader.classList.add('drag');
-});
-uploader.addEventListener('dragleave', () => uploader.classList.remove('drag'));
-uploader.addEventListener('drop', (e) => {
-  e.preventDefault();
-  uploader.classList.remove('drag');
-  const files = Array.from(e.dataTransfer.files);
   addFiles(files);
 });
 
@@ -87,6 +73,21 @@ analyzeBtn.addEventListener('click', async () => {
     // Render Gemini result (markdown)
     const md = data.result || 'Tidak ada hasil dari AI.';
     html += `<div class="result-card"><h3>⚖️ Hasil Analisis (AsGuJu)</h3><div>${marked.parse(md)}</div></div>`;
+
+    // Render verifications
+    if (data.verifications && data.verifications.length) {
+      html += `<div class="result-card"><h3>🔎 Verifikasi Pasal</h3><ul>`;
+      data.verifications.forEach(v => {
+        if (v.verified) {
+          v.sources.forEach(s => {
+            html += `<li><strong>${v.pasal}</strong> — Terverifikasi melalui ${s.site}: <a href="${s.url}" target="_blank">${s.url}</a> (${s.snippet})</li>`;
+          });
+        } else {
+          html += `<li><strong>${v.pasal}</strong> — Tidak ditemukan verifikasi otomatis. Mohon cek manual di BPK/MA.</li>`;
+        }
+      });
+      html += `</ul></div>`;
+    }
 
     resultArea.innerHTML = html;
   } catch (err) {

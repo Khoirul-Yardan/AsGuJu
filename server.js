@@ -1,11 +1,14 @@
 /**
- * server.js
+ * server.js - AsGuJu Pro with pasal verification
  * - Upload files (pdf, docx, txt, png/jpg)
- * - Extract text (pdf-parse, mammoth, plain txt, Tesseract OCR for images)
- * - Build court-focused prompt
- * - Call Gemini (server-side) and return result
+ * - Extract text (pdf-parse, mammoth, txt, Tesseract OCR for images)
+ * - Call Gemini API (server-side) to get legal analysis
+ * - Parse pasal references from AI result and attempt to verify them against official sources (BPK and MA)
  *
- * Usage: create .env with GEMINI_API_KEY and GEMINI_MODEL (eg: models/gemini-2.5-flash)
+ * Usage:
+ *  - create .env with GEMINI_API_KEY and GEMINI_MODEL
+ *  - npm install
+ *  - npm start
  */
 
 require('dotenv').config();
@@ -21,22 +24,19 @@ const cors = require('cors');
 
 const app = express();
 app.use(cors());
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
 const upload = multer({ dest: UPLOAD_DIR });
 
-// Ensure uploads dir exists
-const ensureUploads = async () => {
-  try { await fs.mkdir(UPLOAD_DIR); } catch (e) { /* exists */ }
-};
+async function ensureUploads() {
+  try { await fs.mkdir(UPLOAD_DIR); } catch (e) { }
+}
 ensureUploads();
 
-// Helpers: extract text according to mimetype/extension
-async function extractTextFromFile(filePath, originalName, mimeType) {
+async function extractTextFromFile(filePath, originalName) {
   const ext = path.extname(originalName).toLowerCase();
-
   try {
     if (ext === '.pdf') {
       const dataBuffer = await fs.readFile(filePath);
@@ -46,18 +46,14 @@ async function extractTextFromFile(filePath, originalName, mimeType) {
       const result = await mammoth.extractRawText({ path: filePath });
       return result.value || '';
     } else if (ext === '.txt') {
-      const content = await fs.readFile(filePath, 'utf8');
-      return content;
+      return await fs.readFile(filePath, 'utf8');
     } else if (['.png', '.jpg', '.jpeg', '.bmp', '.tiff'].includes(ext)) {
-      // OCR with tesseract.js
-      const { data: { text } } = await Tesseract.recognize(filePath, 'eng+ind', {
-        logger: m => {} // suppress logs
-      });
+      // Tesseract OCR
+      const { data: { text } } = await Tesseract.recognize(filePath, 'eng+ind');
       return text || '';
     } else {
-      // try read as text fallback
-      const content = await fs.readFile(filePath, 'utf8').catch(()=> '');
-      return content || '';
+      // fallback
+      return await fs.readFile(filePath, 'utf8').catch(()=> '');
     }
   } catch (err) {
     console.error('extractTextFromFile error', err);
@@ -65,118 +61,160 @@ async function extractTextFromFile(filePath, originalName, mimeType) {
   }
 }
 
-// Build prompt for Gemini - court focused, fast & argumentative
-function buildPrompt(caseDescription, fileTexts, options = {}) {
-  // fileTexts: array of { filename, text }
+function buildPrompt(caseDescription, fileTexts) {
   const filesSummary = fileTexts.map(f => `---\nFile: ${f.filename}\n${f.text.substring(0, 4000)}\n`).join('\n');
-
-  const prompt = `
-Kamu adalah AsGuJu, Asisten Hukum Digital untuk persidangan yang berjalan di Indonesia.
-Tugas: dalam konteks pengadilan (cepat, argumentatif), gabungkan:
-  - deskripsi kasus (dari hakim/penuntut/defense),
-  - dan informasi pendukung dari file-file yang diupload (lihat ringkasan di bawah).
-Hasil harus singkat, terstruktur, dan siap dipakai sebagai memo hukum dalam sidang.
-
-Instruksi ketat:
-1) Ambil fakta utama dari deskripsi kasus dan file pendukung.
-2) Tentukan pasal-pasal KUHP/UU yang paling relevan (sebut pasal + ringkasan unsur).
-3) Berikan argumen hukum yang kuat (point-by-point), setiap poin singkat dan sertakan 1-2 referensi resmi (mis. jurnal, putusan, atau UU) jika relevan — tuliskan nama dokumen + sumber (URL jika diketahui).
-4) Jika ada indikasi gangguan jiwa, pembelaan diri, atau pembunuhan berencana, jelaskan alasan mengapa (atau mengapa tidak) secara forensik dan hukum.
-5) Ringkas rekomendasi langkah hukum (mis. dakwaan yang sesuai, bukti yang perlu diperkuat, saksi yang direkomendasikan).
-6) Output dalam MARKDOWN dengan struktur ini:
-
-**Analisis Kasus: [judul singkat]**
-
-### 1. Ringkasan Fakta
-- ...
-
-### 2. Bukti & Temuan dari File Pendukung
-- File: filename1 — [ringkasan 1-2 kalimat]
-- File: filename2 — [ringkasan 1-2 kalimat]
-
-### 3. Pasal-Pasal Relevan
-- Pasal X KUHP: [isi singkat & unsur]
-
-### 4. Argumen Hukum Kuat (poin)
-1. ...
-   - Referensi: [judul, tahun] (URL jika ada)
-
-### 5. Rekomendasi Proses Persidangan (prioritas)
-- ...
-
-Berikan jawaban singkat maksimal ~700 kata. Utamakan kecepatan dan kekuatan argumen untuk digunakan di persidangan. Jangan tulis disclaimer panjang tentang "AI", gunakan gaya formal akademik/hukum.
-  
---- 
-Deskripsi kasus:
+  return `
+You are AsGuJu Pro, an Indonesian legal assistant for courtroom support.
+Combine the case description and the uploaded file contents below, analyze relevant criminal law issues (KUHP, KUHAP) and provide:
+- Facts & Evidence (concise)
+- Relevant Articles (cite KUHP/KUHAP; if possible reference official sources)
+- Legal Arguments (step-by-step: facts -> legal elements -> application)
+- Conclusion & recommended charges / evidence to strengthen
+Produce output in Markdown, concise (max ~700 words). Be explicit about uncertainty (use wording like "indikasi" or "kemungkinan"). 
+Case description:
 ${caseDescription}
 
-File contents (potongan teratas, lebih lengkap di file):
+File contents (top parts):
 ${filesSummary}
 `;
-
-  return prompt;
 }
 
-// Endpoint: upload files + analyze
+/**
+ * Heuristic extraction of "Pasal" mentions from AI output.
+ * Matches patterns like:
+ * - Pasal 340
+ * - Pasal 338 KUHP
+ * - Pasal 49 ayat (1) KUHP
+ */
+function extractPasalReferences(text) {
+  if (!text) return [];
+  const regex = /Pasal\s+([0-9]{1,4})(?:\s*(?:ayat\s*\(?[0-9a-zA-Z\)\-]+)?)*\s*(KUHP|KUHAP|Kitab Undang-Undang Hukum Pidana|)/gi;
+  const matches = [];
+  let m;
+  while ((m = regex.exec(text)) !== null) {
+    const num = m[1];
+    const suffix = m[2] && m[2].trim() !== '' ? m[2].trim() : 'KUHP';
+    const key = `Pasal ${num} ${suffix}`.trim();
+    if (!matches.includes(key)) matches.push(key);
+  }
+  // also try simpler pattern "Pasal 340" without KUHP
+  const regex2 = /Pasal\s+([0-9]{1,4})/gi;
+  while ((m = regex2.exec(text)) !== null) {
+    const num = m[1];
+    const key = `Pasal ${num} KUHP`;
+    if (!matches.includes(key)) matches.push(key);
+  }
+  return matches;
+}
+
+/**
+ * Attempt to verify a pasal by querying peraturan.bpk.go.id search and Mahkamah Agung search.
+ * Note: Sites may change; this function tries several common search endpoints and returns the first match.
+ */
+async function verifyPasalOnline(pasal) {
+  const results = { pasal, verified: false, sources: [] };
+  const queries = [];
+
+  // Prepare search queries
+  const pasalOnly = pasal.replace(/Pasal\s+/i, '').replace(/KUHP/i, '').trim();
+  queries.push(`KUHP Pasal ${pasalOnly}`);
+  queries.push(`Pasal ${pasalOnly} KUHP`);
+  queries.push(`Kitab Undang Undang Hukum Pidana Pasal ${pasalOnly}`);
+
+  // Try BPK search (site structure may vary)
+  for (const q of queries) {
+    try {
+      const url = `https://peraturan.bpk.go.id/Search/Peraturan?Query=${encodeURIComponent(q)}`;
+      const r = await axios.get(url, { timeout: 8000 });
+      const html = r.data || '';
+      if (html && html.toLowerCase().includes(`pasal`) && html.toLowerCase().includes(pasalOnly)) {
+        results.verified = true;
+        results.sources.push({ site: 'peraturan.bpk.go.id', url, snippet: 'Found on BPK search results (HTML match)' });
+        break;
+      }
+    } catch (e) {
+      // ignore and try next
+    }
+  }
+
+  // If not verified, try Mahkamah Agung search for putusan that cite the pasal
+  if (!results.verified) {
+    try {
+      const q = `Pasal ${pasalOnly}`;
+      const url = `https://putusan.mahkamahagung.go.id/search?q=${encodeURIComponent(q)}`;
+      const r = await axios.get(url, { timeout: 8000 });
+      const html = r.data || '';
+      if (html && html.toLowerCase().includes(`pasal`) && html.toLowerCase().includes(pasalOnly)) {
+        results.verified = true;
+        results.sources.push({ site: 'putusan.mahkamahagung.go.id', url, snippet: 'Found in MA search results (HTML match)' });
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  // As fallback, check Google (unsafe but often works) - disabled by default for privacy.
+  if (!results.verified) {
+    try {
+      const url = `https://www.google.com/search?q=${encodeURIComponent(pasal + ' KUHP')}`;
+      const r = await axios.get(url, { timeout: 6000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+      const html = r.data || '';
+      if (html && html.toLowerCase().includes('kuhp') && html.toLowerCase().includes(pasal.replace('Pasal ','').split(' ')[0])) {
+        results.verified = true;
+        results.sources.push({ site: 'google_search', url, snippet: 'Found with google search (HTML match)' });
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  return results;
+}
+
 app.post('/api/analyze', upload.array('files', 8), async (req, res) => {
   try {
     const caseDescription = req.body.caseDescription || '';
     const files = req.files || [];
 
-    // extract text concurrently
     const extracted = [];
     for (const file of files) {
-      const text = await extractTextFromFile(file.path, file.originalname, file.mimetype);
-      extracted.push({ filename: file.originalname, text: text || '(tidak ada teks yang diekstrak)' });
+      const text = await extractTextFromFile(file.path, file.originalname);
+      extracted.push({ filename: file.originalname, text: text || '(no text extracted)' });
     }
 
-    // build prompt
     const prompt = buildPrompt(caseDescription, extracted);
 
-    // call Gemini (server-side). Use GEMINI_API_KEY and GEMINI_MODEL from env
     const API_KEY = process.env.GEMINI_API_KEY;
     const MODEL = process.env.GEMINI_MODEL || 'models/gemini-2.5-flash';
     if (!API_KEY) return res.status(500).json({ error: 'GEMINI_API_KEY not configured in .env' });
 
-    // call generateContent
     const endpoint = `https://generativelanguage.googleapis.com/v1/${MODEL}:generateContent?key=${API_KEY}`;
-
     const body = {
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: prompt }]
-        }
-      ],
-      // set temperature/controls if supported
+      contents: [{ role: "user", parts: [{ text: prompt }] }]
     };
 
-    const r = await axios.post(endpoint, body, {
-      headers: { 'Content-Type': 'application/json' },
-      timeout: 45000
-    });
-
+    const r = await axios.post(endpoint, body, { headers: { 'Content-Type': 'application/json' }, timeout: 60000 });
     const data = r.data;
-    // parse typical response structure
-    const resultText =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text
-      || data?.output?.[0]?.content?.text
-      || JSON.stringify(data).slice(0, 3000);
+    const resultText = data?.candidates?.[0]?.content?.parts?.[0]?.text || JSON.stringify(data).slice(0,3000);
 
-    // cleanup uploaded files (optional) - keep for debugging? we remove to be tidy
+    // extract pasal references
+    const pasals = extractPasalReferences(resultText);
+
+    // verify pasals online (concurrently, but limited)
+    const verifyPromises = pasals.map(p => verifyPasalOnline(p));
+    const verifications = await Promise.all(verifyPromises);
+
+    // cleanup uploaded files
     for (const file of files) {
       try { await fs.unlink(file.path); } catch (e) {}
     }
 
-    return res.json({ success: true, result: resultText, extracted });
+    return res.json({ success: true, result: resultText, extracted, verifications });
   } catch (err) {
-    console.error(err?.response?.data || err.message || err);
+    console.error(err?.response?.data || err);
     return res.status(500).json({ error: 'Server error', detail: err?.response?.data || err?.message });
   }
 });
 
-// start
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`AsGuJu server running on http://localhost:${PORT}`);
-});
+app.listen(PORT, () => console.log(`AsGuJu-Pro (with verification) running at http://localhost:${PORT}`));

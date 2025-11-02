@@ -1,7 +1,7 @@
 {
-  "name": "asguju-v2",
+  "name": "asguju-pro",
   "version": "1.0.0",
-  "description": "AsGuJu v2 - AI legal assistant (file upload, OCR, Gemini API)",
+  "description": "AsGuJu Pro - Legal Reasoning Verified System (demo)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
