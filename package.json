@@ -1,20 +1,17 @@
 {
-  "name": "asguju-pro",
+  "name": "asguju-pro-vercel",
   "version": "1.0.0",
-  "description": "AsGuJu Pro - Legal Reasoning Verified System (demo)",
-  "main": "server.js",
+  "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "dev": "vercel dev",
+    "build": "echo 'Vercel build complete'",
+    "start": "vercel dev"
   },
   "dependencies": {
     "axios": "^1.4.0",
-    "cors": "^2.8.5",
-    "dotenv": "^16.0.0",
-    "express": "^4.18.2",
-    "marked": "^5.1.1",
-    "mammoth": "^1.4.21",
-    "multer": "^1.4.5-lts.1",
+    "formidable": "^3.5.0",
     "pdf-parse": "^1.1.1",
+    "mammoth": "^1.4.21",
     "tesseract.js": "^4.0.2"
   }
 }
